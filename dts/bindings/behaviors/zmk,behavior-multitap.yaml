@@ -1,0 +1,15 @@
+description: Nhap ky tu kieu Nokia (multi-tap), ky tu hien ngay khi bam
+
+compatible: "zmk,behavior-multitap"
+
+include: zero_param.yaml
+
+properties:
+  keys:
+    type: array
+    required: true
+    description: Danh sach keycode luan phien nhau moi lan bam lien tiep cung phim.
+  tapping-term-ms:
+    type: int
+    default: 600
+    description: Thoi gian toi da (ms) giua 2 lan bam de coi la bam tiep cung phim.

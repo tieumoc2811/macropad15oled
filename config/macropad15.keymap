@@ -1,0 +1,240 @@
+#include <behaviors.dtsi>
+#include <dt-bindings/zmk/keys.h>
+
+/*
+ * Macropad15 - 15 phím + 3 encoder + OLED - Pro Micro RP2040 (chỉ USB).
+ * Port từ bản Vial "macropad15oledtest".
+ *
+ * Mỗi layer có 18 binding: 15 phím (P0..P14, đọc theo hàng) + nút nhấn ENC1, ENC2, ENC3.
+ *
+ *            (ENC1)     P0  P1  P2  P3  P4
+ *       (ENC2)  (ENC3)  P5  P6  P7  P8  P9
+ *                       P10 P11 P12 P13 P14
+ *
+ * Layer: 0 Base | 1 Layer1 | 2 Numpad | 3 Media | 4 Nokia | 5 FN (giữ phím FN) | 6, 7 trống
+ *
+ * Nhấn ENC1 (&layer_cycle) = đổi layer nền: Base -> Numpad -> Media -> Nokia -> Base ...
+ * ENC2 = Backspace, ENC3 = Tab (Media: Delete / Enter).
+ * Xoay: ENC1 = âm lượng, ENC2 = trái/phải, ENC3 = lên/xuống (Media: bài trước/sau, PgUp/PgDn).
+ *
+ * Layer 0 là layer thử phím (A..O). Layer 1 (giống bản ESP32-C3) chỉ vào được bằng &to 1
+ * (đặt vào phím nào đó trong Studio/keymap nếu cần); từ Layer 1 về Base bằng &to 0.
+ *
+ * FN (layer 5): F1..F12, reset, bootloader, mute. Giữ FN ở góc trên-phải của layer 2-4.
+ * &studio_unlock đặt ở nút nhấn ENC2 của layer FN (thay cho tổ hợp Unlock của Vial).
+ */
+
+#define L_BASE  0
+#define L_FN1   1
+#define L_NUM   2
+#define L_MEDIA 3
+#define L_NOKIA 4
+#define L_FN    5
+
+/*
+ * Nokia multi-tap: bấm liên tiếp CÙNG phím trong 600ms để đổi ký tự.
+ * Ký tự hiện ngay (gửi Backspace + ký tự mới khi đổi).
+ */
+#define MULTITAP(id, title, ...)                            \
+    id: id {                                             \
+        compatible = "zmk,behavior-multitap";                \
+        #binding-cells = <0>;                                \
+        display-name = title;                                \
+        tapping-term-ms = <600>;                             \
+        keys = <__VA_ARGS__>;                                \
+    };
+
+/ {
+    behaviors {
+        MULTITAP(td_1, "Nokia 1abc", N1 A B C)
+        MULTITAP(td_2, "Nokia 2def", N2 D E F)
+        MULTITAP(td_3, "Nokia 3ghi", N3 G H I)
+        MULTITAP(td_4, "Nokia 4jkl", N4 J K L)
+        MULTITAP(td_5, "Nokia 5mno", N5 M N O)
+        MULTITAP(td_6, "Nokia 6pqr", N6 P Q R)
+        MULTITAP(td_7, "Nokia 7stu", N7 S T U)
+        MULTITAP(td_8, "Nokia 8vwx", N8 V W X)
+        MULTITAP(td_9, "Nokia 9yz", N9 Y Z)
+        MULTITAP(td_0, "Nokia 0 space", N0 SPACE)
+        MULTITAP(td_dot, "Nokia . , ? !", DOT COMMA QMARK EXCL)
+
+        /*
+         * Tap / giữ: dùng 1 phím cho 2 toán tử.
+         * Cú pháp: &ht_op <phím khi GIỮ> <phím khi NHẤN NHANH>
+         *   &ht_op KP_SLASH KP_MINUS    -> nhấn = "-", giữ = "/"
+         *   &ht_op KP_MULTIPLY KP_PLUS  -> nhấn = "+", giữ = "*"
+         */
+        ht_op: ht_op {
+            compatible = "zmk,behavior-hold-tap";
+            #binding-cells = <2>;
+            display-name = "Tap/Hold Operator";
+            flavor = "tap-preferred";
+            tapping-term-ms = <200>;
+            bindings = <&kp>, <&kp>;
+        };
+
+        /* &layer_cycle : Base -> Numpad -> Media -> Nokia -> Base ... (bỏ qua Layer1 và FN) */
+        layer_cycle: layer_cycle {
+            compatible = "zmk,behavior-layer-cycle";
+            #binding-cells = <0>;
+            display-name = "Layer Cycle";
+            cycle-layers = <L_BASE L_NUM L_MEDIA L_NOKIA>;
+        };
+    };
+
+    /* Chuỗi phím bấm lần lượt (không giữ cùng lúc), giống bản C3 */
+    macros {
+        f1f2: f1f2 {
+            compatible = "zmk,behavior-macro";
+            #binding-cells = <0>;
+            display-name = "F1 then F2";
+            wait-ms = <10>;
+            tap-ms = <10>;
+            bindings = <&macro_tap &kp F1 &kp F2>;
+        };
+
+        f11pu: f11pu {
+            compatible = "zmk,behavior-macro";
+            #binding-cells = <0>;
+            display-name = "F11 then PgUp";
+            wait-ms = <10>;
+            tap-ms = <10>;
+            bindings = <&macro_tap &kp F11 &kp PG_UP>;
+        };
+
+        f11pd: f11pd {
+            compatible = "zmk,behavior-macro";
+            #binding-cells = <0>;
+            display-name = "F11 then PgDn";
+            wait-ms = <10>;
+            tap-ms = <10>;
+            bindings = <&macro_tap &kp F11 &kp PG_DN>;
+        };
+    };
+
+    keymap {
+        compatible = "zmk,keymap";
+
+        base_layer {
+            display-name = "Base";
+            bindings = <
+                &kp A  &kp B  &kp C  &kp D  &kp E
+                &kp F  &kp G  &kp H  &kp I  &kp J
+                &kp K  &kp L  &kp M  &kp N  &kp O
+                &layer_cycle  &kp BSPC  &kp TAB
+            >;
+            sensor-bindings = <
+                &inc_dec_kp C_VOL_UP C_VOL_DN
+                &inc_dec_kp RIGHT LEFT
+                &inc_dec_kp DOWN UP
+            >;
+        };
+
+        /* Giống bản ESP32-C3. Nút nhấn encoder trong suốt -> rơi xuống Base (cycle/BSPC/TAB). */
+        layer1 {
+            display-name = "Layer1";
+            bindings = <
+                &kp V       &kp C     &kp X     &kp Z     &kp UP
+                &kp SLASH   &kp DOT   &kp COMMA &kp M     &kp LSHFT
+                &to L_BASE  &f1f2     &f11pu    &f11pd    &kp DEL
+                &trans  &trans  &trans
+            >;
+            sensor-bindings = <
+                &inc_dec_kp C_VOL_UP C_VOL_DN
+                &inc_dec_kp RIGHT LEFT
+                &inc_dec_kp DOWN UP
+            >;
+        };
+
+        numpad_layer {
+            display-name = "Numpad";
+            bindings = <
+                &kp KP_N7  &kp KP_N8  &kp KP_N9  &ht_op KP_SLASH KP_MINUS     &mo L_FN
+                &kp KP_N4  &kp KP_N5  &kp KP_N6  &kp KP_ENTER                 &ht_op KP_MULTIPLY KP_PLUS
+                &kp KP_N1  &kp KP_N2  &kp KP_N3  &kp KP_N0                    &kp KP_DOT
+                &layer_cycle  &kp BSPC  &kp TAB
+            >;
+            sensor-bindings = <
+                &inc_dec_kp C_VOL_UP C_VOL_DN
+                &inc_dec_kp RIGHT LEFT
+                &inc_dec_kp DOWN UP
+            >;
+        };
+
+        media_layer {
+            display-name = "Media";
+            bindings = <
+                &kp C_PREV  &kp C_PP    &kp C_NEXT  &kp C_AL_CALC  &mo L_FN
+                &kp HOME    &kp UP      &kp END     &kp C_VOL_DN   &kp C_VOL_UP
+                &kp LEFT    &kp DOWN    &kp RIGHT   &kp PG_UP      &kp PG_DN
+                &layer_cycle  &kp DEL  &kp RET
+            >;
+            sensor-bindings = <
+                &inc_dec_kp C_VOL_UP C_VOL_DN
+                &inc_dec_kp C_NEXT C_PREV
+                &inc_dec_kp PG_DN PG_UP
+            >;
+        };
+
+        nokia_layer {
+            display-name = "Nokia";
+            bindings = <
+                &td_7  &td_8  &td_9  &caps_word  &mo L_FN
+                &td_4  &td_5  &td_6  &kp RET     &sk LSHFT
+                &td_1  &td_2  &td_3  &td_0       &td_dot
+                &layer_cycle  &kp BSPC  &kp TAB
+            >;
+            sensor-bindings = <
+                &inc_dec_kp C_VOL_UP C_VOL_DN
+                &inc_dec_kp RIGHT LEFT
+                &inc_dec_kp DOWN UP
+            >;
+        };
+
+        fn_layer {
+            display-name = "FN";
+            bindings = <
+                &kp F1  &kp F2  &kp F3   &kp F4       &trans
+                &kp F5  &kp F6  &kp F7   &sys_reset   &bootloader
+                &kp F8  &kp F9  &kp F10  &kp F11      &kp F12
+                &kp C_MUTE  &studio_unlock  &none
+            >;
+            sensor-bindings = <
+                &inc_dec_kp C_VOL_UP C_VOL_DN
+                &inc_dec_kp RIGHT LEFT
+                &inc_dec_kp DOWN UP
+            >;
+        };
+
+        /* Layer 6, 7: trống, để dùng thêm trong Studio */
+        spare_layer_1 {
+            display-name = "Spare1";
+            bindings = <
+                &trans  &trans  &trans  &trans  &trans
+                &trans  &trans  &trans  &trans  &trans
+                &trans  &trans  &trans  &trans  &trans
+                &trans  &trans  &trans
+            >;
+            sensor-bindings = <
+                &inc_dec_kp C_VOL_UP C_VOL_DN
+                &inc_dec_kp RIGHT LEFT
+                &inc_dec_kp DOWN UP
+            >;
+        };
+
+        spare_layer_2 {
+            display-name = "Spare2";
+            bindings = <
+                &trans  &trans  &trans  &trans  &trans
+                &trans  &trans  &trans  &trans  &trans
+                &trans  &trans  &trans  &trans  &trans
+                &trans  &trans  &trans
+            >;
+            sensor-bindings = <
+                &inc_dec_kp C_VOL_UP C_VOL_DN
+                &inc_dec_kp RIGHT LEFT
+                &inc_dec_kp DOWN UP
+            >;
+        };
+    };
+};

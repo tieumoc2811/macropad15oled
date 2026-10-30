@@ -1,0 +1,14 @@
+description: Chuyen lan luot qua danh sach layer, moi lan bam sang layer ke tiep
+
+compatible: "zmk,behavior-layer-cycle"
+
+include: zero_param.yaml
+
+properties:
+  cycle-layers:
+    type: array
+    required: true
+    description: |
+      Danh sach layer (theo ID) se duoc xoay vong. Phan tu dau tien la layer mac dinh
+      (luon bat), cac layer con lai duoc bat lan luot. Layer khong nam trong danh sach
+      (vi du layer FN giu phim) khong bi anh huong.

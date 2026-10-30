@@ -1,0 +1,186 @@
+/*
+ * Macropad 15 phím + 3 encoder EC11 + OLED SSD1306 - module Pro Micro RP2040
+ * (bản ZMK, khớp bản Vial "macropad15oledtest")
+ *
+ * Bố cục vật lý (15 phím 3x5 bên phải, 3 encoder bên trái):
+ *
+ *            (ENC1)     P0  P1  P2  P3  P4
+ *       (ENC2)  (ENC3)  P5  P6  P7  P8  P9
+ *                       P10 P11 P12 P13 P14
+ *
+ *   P(n) nằm ở hàng n%4, cột n/4. ENC1 to (trên), ENC2 nhỏ (trái dưới), ENC3 nhỏ (phải dưới);
+ *   mỗi encoder có nút nhấn.
+ *
+ * Ma trận 5 cột (C0-C4) x 4 hàng (R0-R3), diode ROW2COL
+ * (hàng -> công tắc -> anode diode, CATHODE (đầu có vạch) về đường CỘT). Mỗi phím 1 diode.
+ *   - R0..R3 là output (ZMK quét hàng), C0..C4 là input pull-down.
+ *   - 15 phím: P(n) = hàng n%4, cột n/4  (P0=R0C0, P1=R1C0, ... P14=R2C3). R3C3 để trống.
+ *   - Nút nhấn encoder: ENC1 -> R0C4, ENC2 -> R1C4, ENC3 -> R2C4.
+ *
+ * Gán chân (nhãn Pro Micro -> GPIO RP2040):
+ *   C0 D7  GP7      R0 D1 GP1       ENC1 A D5  GP5   B D6  GP6
+ *   C1 D8  GP8      R1 D0 GP0       ENC2 A D18 GP26  B D19 GP27
+ *   C2 D21 GP29     R2 D2 GP2       ENC3 A D15 GP22  B D16 GP23
+ *   C3 D20 GP28     R3 D3 GP3
+ *   C4 D4  GP4                      OLED SDA D14 GP20, SCL D10 GP21 (I2C0)
+ */
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/zmk/matrix_transform.h>
+#include <physical_layouts.dtsi>
+#include <zephyr/dt-bindings/pinctrl/rpi-pico-rp2040-pinctrl.h>
+#include <zephyr/dt-bindings/i2c/i2c.h>
+
+/* I2C1 (GP2/GP3) bị ma trận dùng -> tắt. I2C0 dùng cho OLED trên GP20/GP21. */
+&i2c1 {
+    status = "disabled";
+};
+
+&pinctrl {
+    i2c0_oled: i2c0_oled {
+        group1 {
+            pinmux = <I2C0_SDA_P20>, <I2C0_SCL_P21>;
+            input-enable;
+            input-schmitt-enable;
+        };
+    };
+};
+
+&i2c0 {
+    status = "okay";
+    pinctrl-0 = <&i2c0_oled>;
+    pinctrl-names = "default";
+    clock-frequency = <I2C_BITRATE_FAST>;
+
+    /* SSD1306 128x64. Màn 128x32: height = <32>, multiplex-ratio = <31>, thêm "com-sequential"
+       và bỏ "com-invdir" nếu hình bị lệch. */
+    oled: ssd1306@3c {
+        compatible = "solomon,ssd1306fb";
+        reg = <0x3c>;
+        width = <128>;
+        height = <64>;
+        segment-offset = <0>;
+        page-offset = <0>;
+        display-offset = <0>;
+        multiplex-ratio = <63>;
+        segment-remap;
+        com-invdir;
+        prechargep = <0x22>;
+    };
+};
+
+/ {
+    chosen {
+        zmk,kscan = &kscan0;
+        zmk,physical-layout = &physical_layout0;
+        zephyr,display = &oled;
+    };
+
+    kscan0: kscan {
+        compatible = "zmk,kscan-gpio-matrix";
+        diode-direction = "row2col";
+        debounce-press-ms = <5>;
+        debounce-release-ms = <5>;
+
+        /* R0 .. R3 (output) */
+        row-gpios
+            = <&pro_micro 1 GPIO_ACTIVE_HIGH>   /* R0 D1 GP1 */
+            , <&pro_micro 0 GPIO_ACTIVE_HIGH>   /* R1 D0 GP0 */
+            , <&pro_micro 2 GPIO_ACTIVE_HIGH>   /* R2 D2 GP2 */
+            , <&pro_micro 3 GPIO_ACTIVE_HIGH>   /* R3 D3 GP3 */
+            ;
+
+        /* C0 .. C4 (input pull-down) */
+        col-gpios
+            = <&pro_micro 7  (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>  /* C0 D7  GP7  */
+            , <&pro_micro 8  (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>  /* C1 D8  GP8  */
+            , <&pro_micro 21 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>  /* C2 D21 GP29 */
+            , <&pro_micro 20 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>  /* C3 D20 GP28 */
+            , <&pro_micro 4  (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>  /* C4 D4  GP4  */
+            ;
+    };
+
+    /*
+     * Vị trí phím (position 0..17) trong keymap:
+     *   0..14  : P0..P14 (hàng trên -> dưới, trái -> phải theo bố cục vật lý)
+     *   15..17 : nút nhấn ENC1, ENC2, ENC3
+     */
+    default_transform: keymap_transform_0 {
+        compatible = "zmk,matrix-transform";
+        columns = <5>;
+        rows = <4>;
+        map = <
+            RC(0,0) RC(1,0) RC(2,0) RC(3,0) RC(0,1)   /* P0  P1  P2  P3  P4  */
+            RC(1,1) RC(2,1) RC(3,1) RC(0,2) RC(1,2)   /* P5  P6  P7  P8  P9  */
+            RC(2,2) RC(3,2) RC(0,3) RC(1,3) RC(2,3)   /* P10 P11 P12 P13 P14 */
+            RC(0,4) RC(1,4) RC(2,4)                   /* nút nhấn ENC1 ENC2 ENC3 */
+        >;
+    };
+
+    /* Physical layout cho ZMK Studio (1/100 phím). Thứ tự TRÙNG với map ở trên. */
+    physical_layout0: physical_layout_0 {
+        compatible = "zmk,physical-layout";
+        display-name = "Macropad15";
+        transform = <&default_transform>;
+        kscan = <&kscan0>;
+
+        keys  //                     w    h    x    y    rot  rx   ry
+            = <&key_physical_attrs 100 100  350   50      0   0    0>  /* P0  */
+            , <&key_physical_attrs 100 100  450   50      0   0    0>  /* P1  */
+            , <&key_physical_attrs 100 100  550   50      0   0    0>  /* P2  */
+            , <&key_physical_attrs 100 100  650   50      0   0    0>  /* P3  */
+            , <&key_physical_attrs 100 100  750   50      0   0    0>  /* P4  */
+
+            , <&key_physical_attrs 100 100  350  150      0   0    0>  /* P5  */
+            , <&key_physical_attrs 100 100  450  150      0   0    0>  /* P6  */
+            , <&key_physical_attrs 100 100  550  150      0   0    0>  /* P7  */
+            , <&key_physical_attrs 100 100  650  150      0   0    0>  /* P8  */
+            , <&key_physical_attrs 100 100  750  150      0   0    0>  /* P9  */
+
+            , <&key_physical_attrs 100 100  350  250      0   0    0>  /* P10 */
+            , <&key_physical_attrs 100 100  450  250      0   0    0>  /* P11 */
+            , <&key_physical_attrs 100 100  550  250      0   0    0>  /* P12 */
+            , <&key_physical_attrs 100 100  650  250      0   0    0>  /* P13 */
+            , <&key_physical_attrs 100 100  750  250      0   0    0>  /* P14 */
+
+            , <&key_physical_attrs 100 100  100    0      0   0    0>  /* nút nhấn ENC1 (to, trên) */
+            , <&key_physical_attrs 100 100    0  150      0   0    0>  /* nút nhấn ENC2 (nhỏ, trái) */
+            , <&key_physical_attrs 100 100  200  150      0   0    0>  /* nút nhấn ENC3 (nhỏ, phải) */
+            ;
+    };
+
+    /*
+     * 3 encoder EC11. Thứ tự trong "sensors" = thứ tự cặp binding trong sensor-bindings
+     * của keymap (ENC1, ENC2, ENC3). Xoay ngược chiều: đổi a-gpios/b-gpios hoặc CW/CCW trong keymap.
+     * resolution = 4 cho loại 4 xung / nấc (phổ biến). 1 nấc nhảy 2 lần thì đặt 2.
+     */
+    encoder_1: encoder_1 {
+        compatible = "alps,ec11";
+        a-gpios = <&pro_micro 5 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;   /* D5 GP5 */
+        b-gpios = <&pro_micro 6 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;   /* D6 GP6 */
+        resolution = <4>;
+        status = "okay";
+    };
+
+    encoder_2: encoder_2 {
+        compatible = "alps,ec11";
+        a-gpios = <&pro_micro 18 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;  /* D18 GP26 */
+        b-gpios = <&pro_micro 19 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;  /* D19 GP27 */
+        resolution = <4>;
+        status = "okay";
+    };
+
+    encoder_3: encoder_3 {
+        compatible = "alps,ec11";
+        a-gpios = <&pro_micro 15 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;  /* D15 GP22 */
+        b-gpios = <&pro_micro 16 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;  /* D16 GP23 */
+        resolution = <4>;
+        status = "okay";
+    };
+
+    sensors: sensors {
+        compatible = "zmk,keymap-sensors";
+        sensors = <&encoder_1 &encoder_2 &encoder_3>;
+        triggers-per-rotation = <20>;
+    };
+};

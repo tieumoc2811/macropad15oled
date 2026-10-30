@@ -1,0 +1,9 @@
+---
+include:
+  # Firmware chinh: Macropad15 cho Pro Micro RP2040 (co ZMK Studio qua USB)
+  - board: sparkfun_pro_micro_rp2040//zmk
+    shield: macropad15
+    snippet: studio-rpc-usb-uart
+  # Firmware xoa sach bo nho luu (settings) khi can reset
+  - board: sparkfun_pro_micro_rp2040//zmk
+    shield: settings_reset

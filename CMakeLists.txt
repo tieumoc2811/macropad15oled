@@ -1,0 +1,6 @@
+# Module ZMK: các behavior tùy chỉnh + màn hình OLED cho Macropad15 (RP2040)
+zephyr_library()
+zephyr_library_include_directories(${APPLICATION_SOURCE_DIR}/include)
+zephyr_library_sources(src/layer_cycle.c)
+zephyr_library_sources(src/multitap.c)
+zephyr_library_sources_ifdef(CONFIG_ZMK_DISPLAY_STATUS_SCREEN_CUSTOM src/oled_status.c)
